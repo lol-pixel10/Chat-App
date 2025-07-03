@@ -8,62 +8,94 @@ public class ChatClient extends Frame implements ActionListener, Runnable {
     private PrintWriter out;
     private BufferedReader in;
 
-    private TextField textField;
-    private TextArea textArea;
+    private TextField inputField;
+    private TextArea chatArea;
+    private Button sendButton;
 
-    public ChatClient(String serverAddress) throws IOException {
-        // Set up GUI
-        setLayout(new BorderLayout());
-        
-        textField = new TextField();
-        textArea = new TextArea();
-        textArea.setEditable(false);
+    public ChatClient(String serverAddress) {
+        setupUI();
 
-        add(textField, BorderLayout.SOUTH);
-        add(textArea, BorderLayout.CENTER);
+        try {
+            socket = new Socket(serverAddress, 5000);
+            out = new PrintWriter(socket.getOutputStream(), true);
+            in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
+            chatArea.append("✅ Connected to server at " + serverAddress + "\n");
 
-        textField.addActionListener(this);
-
-        setTitle("Chat Client");
-        setSize(400, 400);
-        setVisible(true);
-
-        // Connect to the server
-        socket = new Socket(serverAddress, 5000);
-        out = new PrintWriter(socket.getOutputStream(), true);
-        in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
-
-        // Start a new thread to handle incoming messages
-        new Thread(this).start();
+            new Thread(this, "Client-Receiver-Thread").start();
+        } catch (IOException e) {
+            showError("❌ Could not connect to server: " + e.getMessage());
+        }
     }
 
-    // When the user hits "Enter", send the message to the server
+    private void setupUI() {
+        setTitle("Java Chat Client");
+        setSize(500, 400);
+        setLayout(new BorderLayout());
+
+        chatArea = new TextArea();
+        chatArea.setEditable(false);
+
+        inputField = new TextField();
+        sendButton = new Button("Send");
+
+        Panel bottomPanel = new Panel(new BorderLayout());
+        bottomPanel.add(inputField, BorderLayout.CENTER);
+        bottomPanel.add(sendButton, BorderLayout.EAST);
+
+        add(chatArea, BorderLayout.CENTER);
+        add(bottomPanel, BorderLayout.SOUTH);
+
+        inputField.addActionListener(this);
+        sendButton.addActionListener(this);
+
+        addWindowListener(new WindowAdapter() {
+            public void windowClosing(WindowEvent e) {
+                disconnect();
+                System.exit(0);
+            }
+        });
+
+        setVisible(true);
+    }
+
+    private void showError(String message) {
+        chatArea.append("[Error] " + message + "\n");
+    }
+
+    private void disconnect() {
+        try {
+            if (socket != null) socket.close();
+            if (in != null) in.close();
+            if (out != null) out.close();
+        } catch (IOException e) {
+            showError("Error closing connection: " + e.getMessage());
+        }
+    }
+
+    @Override
     public void actionPerformed(ActionEvent e) {
-        String message = textField.getText();
-        textField.setText("");
-        out.println(message); // Send message to the server
+        String message = inputField.getText().trim();
+        if (!message.isEmpty()) {
+            out.println(message);
+            inputField.setText("");
+        }
     }
 
     @Override
     public void run() {
-        String message;
+        String incomingMessage;
         try {
-            // Continuously listen for messages from the server
-            while ((message = in.readLine()) != null) {
-                textArea.append(message + "\n"); // Display message in the text area
+            while ((incomingMessage = in.readLine()) != null) {
+                chatArea.append(incomingMessage + "\n");
             }
         } catch (IOException e) {
-            System.out.println("Connection closed.");
+            showError("Disconnected from server.");
         } finally {
-            try {
-                socket.close();
-            } catch (IOException e) {
-                e.printStackTrace();
-            }
+            disconnect();
         }
     }
 
-    public static void main(String[] args) throws IOException {
-        new ChatClient("localhost"); // Change to server address if not localhost
+    public static void main(String[] args) {
+        new ChatClient("localhost");
     }
 }
