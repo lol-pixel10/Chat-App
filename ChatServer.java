@@ -3,71 +3,75 @@ import java.net.*;
 import java.util.*;
 
 public class ChatServer {
-    // List to store all connected client threads
-    private static Set<ClientHandler> clientHandlers = new HashSet<>();
+    private static Set<ClientHandler> clients = Collections.synchronizedSet(new HashSet<>());
 
-    public static void main(String[] args) throws IOException {
-        ServerSocket serverSocket = new ServerSocket(5000);
-        System.out.println("Server started. Waiting for clients...");
+    public static void main(String[] args) {
+        try (ServerSocket serverSocket = new ServerSocket(5000)) {
+            System.out.println("🚀 Server started on port 5000. Waiting for clients...");
 
-        while (true) {
-            // Accept client connection
-            Socket socket = serverSocket.accept();
-            System.out.println("New client connected");
+            while (true) {
+                Socket clientSocket = serverSocket.accept();
+                System.out.println("🔌 New client connected: " + clientSocket.getInetAddress());
 
-            // Create a new handler for this client
-            ClientHandler clientHandler = new ClientHandler(socket);
-            clientHandlers.add(clientHandler);
-
-            // Start a new thread for the client
-            Thread thread = new Thread(clientHandler);
-            thread.start();
+                ClientHandler handler = new ClientHandler(clientSocket);
+                clients.add(handler);
+                new Thread(handler).start();
+            }
+        } catch (IOException e) {
+            System.out.println("❌ Server error: " + e.getMessage());
         }
     }
 
-    // Broadcasts a message to all clients
-    public static void broadcastMessage(String message, ClientHandler excludeClient) {
-        for (ClientHandler client : clientHandlers) {
-            if (client != excludeClient) {
-                client.sendMessage(message);
+    static void broadcast(String message, ClientHandler exclude) {
+        synchronized (clients) {
+            for (ClientHandler client : clients) {
+                if (client != exclude) {
+                    client.sendMessage(message);
+                }
             }
         }
     }
 
-    // Removes a client from the handler list
-    public static void removeClient(ClientHandler clientHandler) {
-        clientHandlers.remove(clientHandler);
-        System.out.println("Client disconnected");
+    static void removeClient(ClientHandler client) {
+        synchronized (clients) {
+            clients.remove(client);
+        }
+        System.out.println("❎ Client disconnected");
     }
 
-    // Client handler class that manages individual clients
     static class ClientHandler implements Runnable {
         private Socket socket;
         private PrintWriter out;
         private BufferedReader in;
+        private String clientAddress;
 
-        public ClientHandler(Socket socket) throws IOException {
+        public ClientHandler(Socket socket) {
             this.socket = socket;
-            this.out = new PrintWriter(socket.getOutputStream(), true);
-            this.in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
+            this.clientAddress = socket.getInetAddress().toString();
+            try {
+                out = new PrintWriter(socket.getOutputStream(), true);
+                in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
+            } catch (IOException e) {
+                System.out.println("❌ Error initializing client handler: " + e.getMessage());
+            }
         }
 
         @Override
         public void run() {
-            String message;
             try {
-                // Continuously listen for client messages
+                out.println("✅ Welcome to the chat! Your address: " + clientAddress);
+                String message;
                 while ((message = in.readLine()) != null) {
-                    System.out.println("Received: " + message);
-                    ChatServer.broadcastMessage(message, this);
+                    System.out.println("📨 [" + clientAddress + "]: " + message);
+                    ChatServer.broadcast("[" + clientAddress + "]: " + message, this);
                 }
             } catch (IOException e) {
-                System.out.println("Error handling client: " + e.getMessage());
+                System.out.println("❗ Client " + clientAddress + " disconnected with error: " + e.getMessage());
             } finally {
                 try {
                     socket.close();
                 } catch (IOException e) {
-                    e.printStackTrace();
+                    System.out.println("⚠️ Error closing socket: " + e.getMessage());
                 }
                 ChatServer.removeClient(this);
             }
