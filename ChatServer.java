@@ -18,7 +18,7 @@ public class ChatServer {
                 new Thread(handler).start();
             }
         } catch (IOException e) {
-            System.out.println("❌ Server error: " + e.getMessage());
+            System.out.println("❌ Server error:  " + e.getMessage());
         }
     }
 
