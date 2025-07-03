@@ -4,7 +4,9 @@ import java.util.*;
 
 public class ChatServer {
     private static Set<ClientHandler> clients = Collections.synchronizedSet(new HashSet<>());
+ 
 
+    
     public static void main(String[] args) {
         try (ServerSocket serverSocket = new ServerSocket(5000)) {
             System.out.println("🚀 Server started on port 5000. Waiting for clients...");
